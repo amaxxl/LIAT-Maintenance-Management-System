@@ -1,0 +1,15 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<h1>Maintenance overview</h1>
+<p class="muted">Statistics cover only requests you are authorised to view. Completed includes requests already closed.</p>
+<div class="metrics">
+  <div class="metric">All visible requests<strong>{{ total }}</strong></div>
+  <div class="metric">Completed or closed<strong>{{ completed }}</strong></div>
+  <div class="metric">Overdue and unfinished<strong>{{ overdue }}</strong></div>
+</div>
+<h2>Requests by status</h2>
+<div class="table-scroll"><table><thead><tr><th>Status</th><th>Count</th></tr></thead><tbody>{% for name,count in status_rows %}<tr><td>{{ name }}</td><td>{{ count }}</td></tr>{% endfor %}</tbody></table></div>
+<h2>Active workload by maintenance group</h2>
+<p class="small">Includes Assigned, In Progress, Completed awaiting closure, and other non-final assigned requests.</p>
+<div class="table-scroll"><table><thead><tr><th>Group</th><th>Requests not closed/rejected</th></tr></thead><tbody>{% for row in workload %}<tr><td>{{ row.group__name }}</td><td>{{ row.total }}</td></tr>{% empty %}<tr><td colspan="2">No currently assigned work.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

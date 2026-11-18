@@ -1,0 +1,62 @@
+{% extends 'core/base.html' %}
+{% block content %}
+<a href="{% url 'dashboard' %}">← Back to requests</a>
+<h1 style="margin-top:17px">Request #{{ item.pk }} — {{ item.title }}</h1>
+<div class="meta">
+  <p><b>Status:</b> <span class="badge">{{ item.get_status_display }}</span> &nbsp; <b>Priority:</b> {{ item.get_priority_display }}</p>
+  <p><b>Equipment:</b> {{ item.equipment }}</p>
+  <p><b>Reported by:</b> {{ item.reporter.username }} &nbsp; <b>Problem type:</b> {{ item.problem_type.name }}</p>
+  <p><b>Current location:</b> {{ item.equipment.location }}</p>
+  <p><b>Location at submission:</b> {{ item.reported_unit_name }} / {{ item.reported_room_label }} / {{ item.asset_tag_at_submission }}</p>
+  <p><b>Responsible group:</b> {{ item.group|default:'Awaiting triage' }} &nbsp; <b>Technician:</b> {{ item.technician.username|default:'Unassigned' }}</p>
+  {% if item.due_at %}<p><b>Due:</b> {{ item.due_at }}</p>{% endif %}
+</div>
+<h2>Fault description</h2><p>{{ item.description|linebreaksbr }}</p>
+{% if action_form %}
+<section class="actions">
+  <h2 style="margin-top:0">Update maintenance work</h2>
+  <p class="small">Only the actions permitted for this account and request status are available. Assignments require a qualified technician.</p>
+  <form method="post" action="{% url 'request_action' item.pk %}">
+    {% csrf_token %}
+    {{ action_form.non_field_errors }}
+    {% for field in action_form %}
+      <div id="field-{{ field.name }}">
+        <label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}
+        {% if field.help_text %}<div class="small">{{ field.help_text }}</div>{% endif %}
+        {{ field.errors }}
+      </div>
+    {% endfor %}
+    <p><button type="submit">Apply action</button></p>
+  </form>
+</section>
+{{ eligible_by_group|json_script:"eligible-by-group" }}
+<script>
+(function(){
+  const action=document.getElementById('id_action');
+  const group=document.getElementById('id_group');
+  const technician=document.getElementById('id_technician');
+  const allowed=JSON.parse(document.getElementById('eligible-by-group').textContent);
+  function refresh(){
+    const assigning=action && action.value==='assign';
+    for(const name of ['group','technician']){
+      const el=document.getElementById('field-'+name);if(el)el.hidden=!assigning;
+    }
+    if(!assigning || !group || !technician)return;
+    const ids=(allowed[group.value]||[]).map(String);
+    for(const option of technician.options){
+      if(!option.value)continue;
+      option.disabled=!ids.includes(option.value);
+      option.hidden=option.disabled;
+    }
+    if(technician.selectedOptions.length && technician.selectedOptions[0].disabled)technician.value='';
+  }
+  if(group)group.addEventListener('change',refresh);
+  if(action)action.addEventListener('change',refresh);
+  refresh();
+})();
+</script>
+{% endif %}
+<h2>Status history</h2><ol class="history">{% for h in item.status_history.all %}<li>{{ h.created_at }}: <b>{{ h.old_status }} → {{ h.new_status }}</b> by {{ h.actor.username }}{% if h.reason %} — {{ h.reason }}{% endif %}</li>{% empty %}<li>No status changes yet.</li>{% endfor %}</ol>
+<h2>Assignment history</h2><ol class="history">{% for h in item.assignment_history.all %}<li>{{ h.created_at }}: {{ h.old_group.name|default:'Unassigned' }} / {{ h.old_technician.username|default:'Unassigned' }} → <b>{{ h.new_group.name }} / {{ h.new_technician.username }}</b> by {{ h.actor.username }} — {{ h.reason }}</li>{% empty %}<li>No assignments yet.</li>{% endfor %}</ol>
+<h2>Repair notes</h2><ol class="history">{% for h in item.work_logs.all %}<li>{{ h.created_at }} — {{ h.author.username }}: {{ h.note }}</li>{% empty %}<li>No repair notes yet.</li>{% endfor %}</ol>
+{% endblock %}
