@@ -1,12 +1,15 @@
 """Server-side authorisation and transactional maintenance workflow operations."""
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.utils import timezone
+from datetime import datetime
 from django.db.models import Q
 from django.contrib.auth.models import User
 
 from .models import (
     MaintenanceRequest as R, StatusHistory, AssignmentHistory, WorkLog,
     Profile, CoordinatorScope, GroupMembership, TechnicianCompetency, MaintenanceGroup,
+    DueDateHistory,
 )
 
 
@@ -94,17 +97,18 @@ def allowed_actions(user, request):
         if request.status == R.SUBMITTED:
             return [('review', 'Review request'), ('reject', 'Reject request')]
         if request.status == R.UNDER_REVIEW:
-            return [('assign', 'Assign technician'), ('reject', 'Reject request')]
+            return [('assign', 'Assign technician'), ('set_due', 'Set or update due date'),
+                    ('reject', 'Reject request')]
         if request.status in (R.ASSIGNED, R.IN_PROGRESS):
-            return [('assign', 'Reassign technician')]
+            return [('assign', 'Reassign technician'), ('set_due', 'Set or update due date')]
         if request.status == R.COMPLETED:
             return [('close', 'Approve and close'), ('return', 'Return for correction'),
-                    ('assign', 'Reassign for correction')]
+                    ('assign', 'Reassign for correction'), ('set_due', 'Set or update due date')]
     return []
 
 
 @transaction.atomic
-def perform_action(pk, actor, action, reason='', group=None, technician=None):
+def perform_action(pk, actor, action, reason='', group=None, technician=None, due_at=None):
     """Enforce each permitted transition and write its history atomically."""
     request = R.objects.select_for_update().select_related(
         'equipment__category', 'problem_type', 'group'
@@ -112,6 +116,30 @@ def perform_action(pk, actor, action, reason='', group=None, technician=None):
     actor_role = role(actor)
     old = request.status
     reason = (reason or '').strip()
+
+    if action == 'set_due':
+        if old not in (R.UNDER_REVIEW, R.ASSIGNED, R.IN_PROGRESS, R.COMPLETED):
+            raise PermissionDenied('Due dates cannot be changed in this request status')
+        if actor_role != Profile.COORDINATOR or not can_manage_request(actor, request):
+            raise PermissionDenied('Only a responsible maintenance coordinator can change due dates')
+        if not reason:
+            raise ValidationError('Explain why the due date is being changed')
+        if due_at is not None:
+            if not isinstance(due_at, datetime) or timezone.is_naive(due_at):
+                raise ValidationError('Supply a valid timezone-aware due date')
+            if due_at <= timezone.now():
+                raise ValidationError('The due date must be in the future')
+        if request.due_at == due_at:
+            raise ValidationError('Choose a different due date or clear the existing date')
+        old_due_at = request.due_at
+        request.due_at = due_at
+        request.save()
+        DueDateHistory.objects.create(
+            request=request, actor=actor, old_due_at=old_due_at,
+            new_due_at=due_at, reason=reason,
+        )
+        # A deadline edit does not change the request's lifecycle state.
+        return request
 
     if action == 'review':
         if old != R.SUBMITTED or not can_manage_request(actor, request):

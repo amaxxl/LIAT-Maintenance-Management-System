@@ -31,7 +31,7 @@ class RequestAdmin(admin.ModelAdmin):
     list_filter = ('status', 'group', 'priority')
     search_fields = ('title', 'equipment__asset_tag', 'reporter__username')
     # Workflow changes must be made through the audited application service.
-    readonly_fields = ('status', 'group', 'technician', 'reported_unit_id',
+    readonly_fields = ('status', 'group', 'technician', 'due_at', 'reported_unit_id',
                        'reported_unit_name', 'reported_location_id',
                        'reported_room_label', 'asset_tag_at_submission')
 
@@ -49,7 +49,7 @@ class AuditRecordAdmin(admin.ModelAdmin):
         return False
 
 
-for model in (models.StatusHistory, models.AssignmentHistory, models.WorkLog):
+for model in (models.StatusHistory, models.AssignmentHistory, models.WorkLog, models.DueDateHistory):
     admin.site.register(model, AuditRecordAdmin)
 
 for model in (

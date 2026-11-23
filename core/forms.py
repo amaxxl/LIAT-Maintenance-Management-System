@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth.models import User
+from django.utils import timezone
 from .models import MaintenanceRequest, Equipment, MaintenanceGroup, Profile
 from .services import allowed_actions, eligible_technicians, role, scope_groups
 
@@ -21,6 +22,13 @@ class ActionForm(forms.Form):
                                     label='Maintenance group')
     technician = forms.ModelChoiceField(queryset=User.objects.none(), required=False,
                                          label='Eligible technician')
+    due_at = forms.DateTimeField(
+        required=False,
+        label='Due date (local time)',
+        input_formats=['%Y-%m-%dT%H:%M'],
+        widget=forms.DateTimeInput(format='%Y-%m-%dT%H:%M', attrs={'type': 'datetime-local'}),
+        help_text='For Set or update due date: choose a future date/time, or leave blank to clear the deadline.',
+    )
     reason = forms.CharField(widget=forms.Textarea(attrs={'rows': 3}), required=False,
                              help_text='Required for assignment, reassignment, rejection, completion and return.')
 
@@ -28,6 +36,8 @@ class ActionForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.item = item
         self.fields['action'].choices = allowed_actions(user, item)
+        if not self.is_bound and item.due_at:
+            self.initial.setdefault('due_at', item.due_at)
         if role(user) != Profile.COORDINATOR:
             return
         groups = MaintenanceGroup.objects.filter(pk__in=scope_groups(user)).order_by('name')
@@ -50,6 +60,11 @@ class ActionForm(forms.Form):
 
     def clean(self):
         data = super().clean()
+        if data.get('action') == 'set_due':
+            if not (data.get('reason') or '').strip():
+                self.add_error('reason', 'Explain the deadline change.')
+            if data.get('due_at') and data['due_at'] <= timezone.now():
+                self.add_error('due_at', 'The due date must be in the future.')
         if data.get('action') == 'assign':
             if not data.get('group'):
                 self.add_error('group', 'Choose a maintenance group.')

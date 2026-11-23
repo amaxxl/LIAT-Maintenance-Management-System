@@ -1,5 +1,8 @@
 """Workflow, permission, UI validation, history and reporting regression tests."""
 from django.test import TestCase
+from datetime import timedelta
+from django.utils import timezone
+from django.contrib import admin
 from django.urls import reverse
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError, PermissionDenied
@@ -7,7 +10,7 @@ from .models import (
     AcademyUnit, Location, EquipmentCategory, ProblemType, Equipment,
     MaintenanceGroup, Profile, GroupMembership, CoordinatorScope,
     TechnicianCompetency, MaintenanceRequest as R, StatusHistory,
-    AssignmentHistory, WorkLog,
+    AssignmentHistory, WorkLog, DueDateHistory,
 )
 from .services import perform_action, can_view, role
 
@@ -56,6 +59,103 @@ class WorkflowTests(TestCase):
         perform_action(self.req.pk, self.coord, 'review', reason='Intake checked')
         perform_action(self.req.pk, self.coord, 'assign', reason='Qualified IT group',
                        group=self.group, technician=self.tech)
+
+    def test_coordinator_can_set_modify_and_clear_due_date_with_audit(self):
+        perform_action(self.req.pk, self.coord, 'review')
+        initial = timezone.now() + timedelta(days=2)
+        updated = timezone.now() + timedelta(days=5)
+        perform_action(self.req.pk, self.coord, 'set_due', reason='Repair target', due_at=initial)
+        perform_action(self.req.pk, self.coord, 'set_due', reason='Parts delayed', due_at=updated)
+        perform_action(self.req.pk, self.coord, 'set_due', reason='No deadline needed', due_at=None)
+        self.req.refresh_from_db()
+        self.assertIsNone(self.req.due_at)
+        rows = list(DueDateHistory.objects.filter(request=self.req).order_by('pk'))
+        self.assertEqual(len(rows), 3)
+        self.assertIsNone(rows[0].old_due_at)
+        self.assertEqual(rows[0].new_due_at, initial)
+        self.assertEqual(rows[1].old_due_at, initial)
+        self.assertEqual(rows[1].new_due_at, updated)
+        self.assertEqual(rows[2].old_due_at, updated)
+        self.assertIsNone(rows[2].new_due_at)
+        self.assertEqual([x.reason for x in rows], ['Repair target', 'Parts delayed', 'No deadline needed'])
+        self.assertEqual(StatusHistory.objects.filter(request=self.req).count(), 1)
+
+    def test_coordinator_due_date_form_and_post(self):
+        perform_action(self.req.pk, self.coord, 'review')
+        self.login(self.coord)
+        detail = self.client.get(reverse('request_detail', args=[self.req.pk]))
+        self.assertContains(detail, 'Set or update due date')
+        self.assertContains(detail, 'id_due_at')
+        future = timezone.localtime(timezone.now() + timedelta(days=2))
+        response = self.client.post(reverse('request_action', args=[self.req.pk]), {
+            'action': 'set_due', 'due_at': future.strftime('%Y-%m-%dT%H:%M'),
+            'reason': 'Expected completion time',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.req.refresh_from_db()
+        self.assertIsNotNone(self.req.due_at)
+        self.assertEqual(DueDateHistory.objects.filter(request=self.req).count(), 1)
+        detail = self.client.get(reverse('request_detail', args=[self.req.pk]))
+        self.assertContains(detail, 'Due date history')
+        self.assertContains(detail, 'Expected completion time')
+        self.assertEqual(self.req.status, R.UNDER_REVIEW)
+
+    def test_due_date_updates_are_coordinator_only_and_group_scoped(self):
+        perform_action(self.req.pk, self.coord, 'review')
+        future = timezone.now() + timedelta(days=2)
+        for actor in (self.admin, self.requester, self.tech):
+            with self.assertRaises(PermissionDenied):
+                perform_action(self.req.pk, actor, 'set_due', reason='Unauthorized', due_at=future)
+        self.login(self.admin)
+        response = self.client.post(reverse('request_action', args=[self.req.pk]), {
+            'action': 'set_due', 'reason': 'Denied', 'due_at': '2027-04-01T12:00',
+        })
+        self.assertEqual(response.status_code, 403)
+        self.assertIn('due_at', admin.site._registry[R].get_readonly_fields(None))
+        perform_action(self.req.pk, self.coord, 'assign', group=self.group,
+                       technician=self.tech, reason='Assign specialist')
+        with self.assertRaises(PermissionDenied):
+            perform_action(self.req.pk, self.outsider, 'set_due', reason='Wrong group', due_at=future)
+        self.assertEqual(DueDateHistory.objects.filter(request=self.req).count(), 0)
+        self.req.refresh_from_db()
+        self.assertIsNone(self.req.due_at)
+
+    def test_due_date_rejects_invalid_status_missing_reason_past_or_no_change(self):
+        future = timezone.now() + timedelta(days=3)
+        with self.assertRaises(PermissionDenied):
+            perform_action(self.req.pk, self.coord, 'set_due', reason='Too early', due_at=future)
+        perform_action(self.req.pk, self.coord, 'review')
+        with self.assertRaises(ValidationError):
+            perform_action(self.req.pk, self.coord, 'set_due', reason='', due_at=future)
+        with self.assertRaises(ValidationError):
+            perform_action(self.req.pk, self.coord, 'set_due', reason='Past deadline',
+                           due_at=timezone.now() - timedelta(days=1))
+        perform_action(self.req.pk, self.coord, 'set_due', reason='Valid', due_at=future)
+        with self.assertRaises(ValidationError):
+            perform_action(self.req.pk, self.coord, 'set_due', reason='No change', due_at=future)
+        self.review_assign_after_review()
+        perform_action(self.req.pk, self.tech, 'start')
+        perform_action(self.req.pk, self.tech, 'complete', reason='Repaired')
+        perform_action(self.req.pk, self.coord, 'close')
+        with self.assertRaises(PermissionDenied):
+            perform_action(self.req.pk, self.coord, 'set_due', reason='Closed', due_at=None)
+        self.assertEqual(DueDateHistory.objects.filter(request=self.req).count(), 1)
+
+    def review_assign_after_review(self):
+        perform_action(self.req.pk, self.coord, 'assign', group=self.group,
+                       technician=self.tech, reason='Qualified group')
+
+    def test_due_date_overdue_count_excludes_final_states(self):
+        self.review_assign()
+        future = timezone.now() + timedelta(days=1)
+        perform_action(self.req.pk, self.coord, 'set_due', reason='Repair by tomorrow', due_at=future)
+        self.login(self.coord)
+        self.assertEqual(self.client.get(reverse('reports')).context['overdue'], 0)
+        R.objects.filter(pk=self.req.pk).update(due_at=timezone.now() - timedelta(hours=1))
+        self.assertEqual(self.client.get(reverse('reports')).context['overdue'], 1)
+        perform_action(self.req.pk, self.tech, 'start')
+        perform_action(self.req.pk, self.tech, 'complete', reason='Done')
+        self.assertEqual(self.client.get(reverse('reports')).context['overdue'], 0)
 
     def test_administrator_can_view_and_report_but_has_no_workflow_actions(self):
         # Oversight remains visible, but action controls and direct POSTs are denied.

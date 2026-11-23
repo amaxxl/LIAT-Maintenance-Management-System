@@ -9,6 +9,7 @@ This is the **updated source project**, based on the user's original Stage 2 ZIP
 - Assignment uses **validated group and technician dropdowns**. Candidate technicians must be active, have active group membership, and have active competency for the equipment category **and** problem type. Server-side validation is authoritative; filtering dropdown options is only a usability aid.
 - **Reassignment** from Assigned, In Progress, or Completed resets the request to Assigned and logs the old/new technician and group with actor, time, and reason. The previous assignee loses access.
 - **Return for correction** after Completed returns work to In Progress for the **same** technician; alternatively the coordinator selects *Reassign for correction*, which returns the work to Assigned for the new technician.
+- Maintenance Coordinators can set, change, or clear optional due dates after review and before closure/rejection, with a mandatory reason and append-only deadline history. Existing deadlines are visible to requesters and technicians. Overdue means a due date is before now and the status is not Completed, Closed, or Rejected. Django Admin cannot edit due dates directly.
 - Role-scoped dashboard search/status/priority/group/overdue filters, and a coordinator/administrator reports page showing status counts, completed/closed, overdue, and active work by group.
 - Additional negative/boundary tests for direct-URL privacy, unauthorised actions, eligibility, cross-group coordinator scope, missing resolution notes, history, relocation snapshots, transitions, and reporting.
 - A cleaner responsive interface. User and master-data management use Django Admin. Audit rows are read-only in Django Admin, not protected against raw database editing.
@@ -63,17 +64,18 @@ If you do not want to preserve previous local data, skip steps 1–2 and start w
 1. Sign in as `student1` or `employee1`. Use **Report fault** and select `LIAT-PC-001`, Hardware fault. The new request starts as **Submitted** with its initial room/unit snapshot.
 2. Sign in as `coordinator1`. Both `coordinator1` and `coordinator2` can initially see unassigned intake, but only a coordinator with IT Maintenance scope may assign it to that group. Open the request and select **Review request**, then **Assign technician** and choose **IT Maintenance** → **technician1** from dropdowns. Provide a reason.
 3. Sign in as `technician1`, choose **Start work**, then **Complete work** with a resolution note. Blank completion notes are rejected.
-4. Sign in as `coordinator1`. Choose **Return for correction** (same technician returns to In Progress) or **Reassign for correction** to `technician2` (request resets to Assigned; previous/new assignment is recorded), or **Approve and close** to finish.
-5. View **Reports** as coordinator or administrator. Use filters and verify the request's **Status history**, **Assignment history**, and **Repair notes**.
-6. Test privacy via `employee2`, `technician2`, and `coordinator2` on a request not assigned to them / their group. Those direct pages and actions should return HTTP 403 where unauthorised.
-7. Change the equipment location in Django Admin and confirm the old request still displays the initial room/unit snapshot.
+4. Optionally, while the request is active, sign in as `coordinator1` and choose **Set or update due date**. Enter a future local date/time or leave it blank to clear a deadline, with a reason. Check **Due date history** to see the change.
+5. Sign in as `coordinator1`. Choose **Return for correction** (same technician returns to In Progress) or **Reassign for correction** to `technician2` (request resets to Assigned; previous/new assignment is recorded), or **Approve and close** to finish.
+6. View **Reports** as coordinator or administrator. Use filters and verify the request's **Status history**, **Assignment history**, and **Repair notes**.
+7. Test privacy via `employee2`, `technician2`, and `coordinator2` on a request not assigned to them / their group. Those direct pages and actions should return HTTP 403 where unauthorised.
+8. Change the equipment location in Django Admin and confirm the old request still displays the initial room/unit snapshot.
 
 ## Model and known limitations
 
 - Model-level snapshot validation runs in `.save()`; raw SQL / bulk updates can bypass it. Audit history is transactionally saved by the service and read-only in Django Admin but is not tamper-evident at the DB level.
 - A coordinator can triage any unassigned incoming request; after group assignment the scope becomes group-specific. This is a conscious policy choice for the prototype, not an academy-wide universal requirement.
 - User creation, activation/deactivation, role assignment, and master data currently use **Django Admin**. A new user can be created via the User page and a Profile role can be attached via the user's edit page or Profiles admin. Don't grant `is_staff`/`is_superuser` to ordinary requesters.
-- `due_at` can currently be maintained via Django Admin for demonstration. Reporting marks an unfinished request overdue only when it has a due date before the current time. Coordinator deadline editing and backup/restore procedures need further work.
+- Due dates are optional and can be changed or cleared by a coordinator during Under Review, Assigned, In Progress and Completed states. Changes require an explanation and are logged in DueDateHistory; deadlines can no longer be edited directly in Django Admin. Backup/restore procedures still need further work.
 - SQLite supports the local prototype. On SQLite, `select_for_update` does not provide the same row-level locking as PostgreSQL, so concurrency has not been stress-tested.
 - Django's provided security features help, but full endpoint/penetration/performance tests, deployment, comprehensive account lifecycle integration, report exports, and frontend/API migration remain future work.
 - This package contains **new tests**, but their execution must be verified in the user's local Django environment. A Python syntax check is not a substitute for the Django test suite.

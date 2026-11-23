@@ -86,6 +86,17 @@ class MaintenanceRequest(models.Model):
     if getattr(self,field)!=getattr(old,field):raise ValidationError('Historical submission snapshot cannot be changed')
   super().save(*args,**kwargs)
  def __str__(self):return f'#{self.pk}: {self.title}'
+class DueDateHistory(models.Model):
+    """Append-only application audit of coordinator deadline changes."""
+    request = models.ForeignKey(MaintenanceRequest, on_delete=models.CASCADE,
+                                related_name='due_date_history')
+    actor = models.ForeignKey(User, on_delete=models.PROTECT)
+    old_due_at = models.DateTimeField(null=True, blank=True)
+    new_due_at = models.DateTimeField(null=True, blank=True)
+    reason = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class StatusHistory(models.Model):
  request=models.ForeignKey(MaintenanceRequest,on_delete=models.CASCADE,related_name='status_history')
  actor=models.ForeignKey(User,on_delete=models.PROTECT)

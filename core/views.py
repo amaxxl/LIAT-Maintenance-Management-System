@@ -88,7 +88,7 @@ def action_form_context(user, item, data=None):
 def request_detail(request, pk):
     obj = get_object_or_404(R.objects.select_related(
         'equipment__location__unit', 'group', 'technician', 'reporter', 'problem_type'
-    ).prefetch_related('status_history__actor', 'assignment_history', 'work_logs__author'), pk=pk)
+    ).prefetch_related('status_history__actor', 'assignment_history', 'work_logs__author', 'due_date_history__actor'), pk=pk)
     if not can_view(request.user, obj):
         raise PermissionDenied('This request is not visible to your role')
     context = {'item': obj, 'role': role(request.user)}
@@ -114,7 +114,7 @@ def request_action(request, pk):
     try:
         perform_action(
             pk, request.user, action['action'], action['reason'],
-            action.get('group'), action.get('technician'),
+            action.get('group'), action.get('technician'), due_at=action.get('due_at'),
         )
         messages.success(request, 'Maintenance request updated successfully.')
     except (ValidationError, PermissionDenied) as exc:

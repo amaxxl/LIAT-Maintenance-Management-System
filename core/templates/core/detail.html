@@ -9,7 +9,7 @@
   <p><b>Current location:</b> {{ item.equipment.location }}</p>
   <p><b>Location at submission:</b> {{ item.reported_unit_name }} / {{ item.reported_room_label }} / {{ item.asset_tag_at_submission }}</p>
   <p><b>Responsible group:</b> {{ item.group|default:'Awaiting triage' }} &nbsp; <b>Technician:</b> {{ item.technician.username|default:'Unassigned' }}</p>
-  {% if item.due_at %}<p><b>Due:</b> {{ item.due_at }}</p>{% endif %}
+  <p><b>Due:</b> {{ item.due_at|date:'Y-m-d H:i'|default:'Not set' }} (local time)</p>
 </div>
 <h2>Fault description</h2><p>{{ item.description|linebreaksbr }}</p>
 {% if action_form %}
@@ -41,6 +41,8 @@
     for(const name of ['group','technician']){
       const el=document.getElementById('field-'+name);if(el)el.hidden=!assigning;
     }
+    const deadlineField=document.getElementById('field-due_at');
+    if(deadlineField)deadlineField.hidden=!(action && action.value==='set_due');
     if(!assigning || !group || !technician)return;
     const ids=(allowed[group.value]||[]).map(String);
     for(const option of technician.options){
@@ -56,6 +58,7 @@
 })();
 </script>
 {% endif %}
+<h2>Due date history</h2><ol class="history">{% for h in item.due_date_history.all %}<li>{{ h.created_at }}: {{ h.old_due_at|date:'Y-m-d H:i'|default:'Not set' }} → <b>{{ h.new_due_at|date:'Y-m-d H:i'|default:'Cleared' }}</b> by {{ h.actor.username }} — {{ h.reason }}</li>{% empty %}<li>No due date changes yet.</li>{% endfor %}</ol>
 <h2>Status history</h2><ol class="history">{% for h in item.status_history.all %}<li>{{ h.created_at }}: <b>{{ h.old_status }} → {{ h.new_status }}</b> by {{ h.actor.username }}{% if h.reason %} — {{ h.reason }}{% endif %}</li>{% empty %}<li>No status changes yet.</li>{% endfor %}</ol>
 <h2>Assignment history</h2><ol class="history">{% for h in item.assignment_history.all %}<li>{{ h.created_at }}: {{ h.old_group.name|default:'Unassigned' }} / {{ h.old_technician.username|default:'Unassigned' }} → <b>{{ h.new_group.name }} / {{ h.new_technician.username }}</b> by {{ h.actor.username }} — {{ h.reason }}</li>{% empty %}<li>No assignments yet.</li>{% endfor %}</ol>
 <h2>Repair notes</h2><ol class="history">{% for h in item.work_logs.all %}<li>{{ h.created_at }} — {{ h.author.username }}: {{ h.note }}</li>{% empty %}<li>No repair notes yet.</li>{% endfor %}</ol>
