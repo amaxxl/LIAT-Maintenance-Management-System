@@ -6,12 +6,16 @@
 {% if can_see_reports %}<a class="btn secondary" href="{% url 'reports' %}">View maintenance reports</a>{% endif %}
 <form method="get" class="filters" aria-label="Filter maintenance requests">
   <div><label for="q">Search asset or text</label><input id="q" name="q" value="{{ filters.q|default:'' }}" placeholder="Asset tag or title"></div>
+  <div><label for="equipment">Equipment</label><select name="equipment" id="equipment"><option value="">All equipment</option>{% for e in equipment_choices %}{% with eid=e.pk|stringformat:"s" %}<option value="{{ e.pk }}" {% if filters.equipment == eid %}selected{% endif %}>{{ e.asset_tag }} — {{ e.name }}</option>{% endwith %}{% endfor %}</select></div>
   <div><label for="status">Status</label><select name="status" id="status"><option value="">All statuses</option>{% for value,label in statuses %}<option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
   <div><label for="priority">Priority</label><select name="priority" id="priority"><option value="">All priorities</option>{% for value,label in priority_options %}<option value="{{ value }}" {% if filters.priority == value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
-  {% if groups %}<div><label for="group">Maintenance group</label><select id="group" name="group"><option value="">All groups</option>{% for g in groups %}{% with gid=g.pk|stringformat:"s" %}<option value="{{ g.pk }}" {% if filters.group == gid %}selected{% endif %}>{{ g.name }}</option>{% endwith %}{% endfor %}</select></div>{% endif %}
+  <div><label for="group">Maintenance group</label><select id="group" name="group"><option value="">All groups</option>{% for g in groups %}{% with gid=g.pk|stringformat:"s" %}<option value="{{ g.pk }}" {% if filters.group == gid %}selected{% endif %}>{{ g.name }}</option>{% endwith %}{% endfor %}</select></div>
+  <div><label for="date_from">Submitted from</label><input type="date" id="date_from" name="date_from" value="{{ filters.date_from|default:'' }}"></div>
+  <div><label for="date_to">Submitted through</label><input type="date" id="date_to" name="date_to" value="{{ filters.date_to|default:'' }}"></div>
   <div><label for="overdue">Due date</label><select name="overdue" id="overdue"><option value="">Any</option><option value="1" {% if filters.overdue == '1' %}selected{% endif %}>Overdue only</option></select></div>
   <div><button type="submit">Apply filters</button> <a href="{% url 'dashboard' %}">Reset</a></div>
 </form>
+<p class="small">Submitted from/through filters use the date the request was created. The due-date filter shows overdue, unfinished work.</p>
 <div class="table-scroll"><table>
 <thead><tr><th>ID</th><th>Title</th><th>Asset</th><th>Status</th><th>Priority</th><th>Group</th><th>Technician</th></tr></thead>
 <tbody>{% for x in requests %}<tr>

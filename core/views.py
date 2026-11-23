@@ -1,4 +1,5 @@
 """Role-scoped pages, business-action endpoint, and basic maintenance reports."""
+from datetime import date
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -6,7 +7,7 @@ from django.db.models import Q, Count
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 
-from .models import MaintenanceRequest as R, MaintenanceGroup, Profile
+from .models import MaintenanceRequest as R, MaintenanceGroup, Equipment, Profile
 from .forms import RequestForm, ActionForm
 from .services import role, can_view, perform_action, visible_requests, allowed_actions, eligible_technicians, scope_groups
 
@@ -19,6 +20,7 @@ def filtered_requests(request, queryset):
     status = request.GET.get('status', '')
     priority = request.GET.get('priority', '')
     group = request.GET.get('group', '')
+    equipment = request.GET.get('equipment', '')
     search = request.GET.get('q', '').strip()[:100]
     if status in dict(R.STATUSES):
         queryset = queryset.filter(status=status)
@@ -26,6 +28,18 @@ def filtered_requests(request, queryset):
         queryset = queryset.filter(priority=priority)
     if group.isdigit():
         queryset = queryset.filter(group_id=int(group))
+    if equipment.isdigit():
+        queryset = queryset.filter(equipment_id=int(equipment))
+    # Submission date is independent of the optional due date/overdue filter.
+    # Invalid date strings are ignored; the HTML form accepts ISO dates.
+    for param, lookup in (('date_from', 'created_at__date__gte'),
+                          ('date_to', 'created_at__date__lte')):
+        raw_value = request.GET.get(param, '')
+        try:
+            selected_date = date.fromisoformat(raw_value)
+        except (TypeError, ValueError):
+            continue
+        queryset = queryset.filter(**{lookup: selected_date})
     if search:
         queryset = queryset.filter(Q(title__icontains=search) |
                                    Q(equipment__asset_tag__icontains=search) |
@@ -40,16 +54,19 @@ def filtered_requests(request, queryset):
 @login_required
 def dashboard(request):
     user_role = role(request.user)
-    qs = filtered_requests(request, request_list_for(request.user))
-    if user_role == Profile.ADMIN:
-        groups = MaintenanceGroup.objects.order_by('name')
-    elif user_role == Profile.COORDINATOR:
-        groups = MaintenanceGroup.objects.filter(pk__in=scope_groups(request.user)).order_by('name')
-    else:
-        groups = MaintenanceGroup.objects.none()
+    # Build dropdown choices from the unfiltered, role-scoped queryset.
+    # A requester or technician must not discover other people's equipment.
+    visible = request_list_for(request.user)
+    groups = MaintenanceGroup.objects.filter(
+        pk__in=visible.exclude(group__isnull=True).values('group_id')
+    ).order_by('name')
+    equipment_choices = Equipment.objects.filter(
+        pk__in=visible.values('equipment_id')
+    ).order_by('asset_tag')
+    qs = filtered_requests(request, visible)
     return render(request, 'core/dashboard.html', {
         'requests': qs, 'role': user_role, 'statuses': R.STATUSES,
-        'groups': groups, 'filters': request.GET,
+        'groups': groups, 'equipment_choices': equipment_choices, 'filters': request.GET,
         'priority_options': [('low', 'Low'), ('medium', 'Medium'), ('high', 'High')],
         'can_report': user_role == Profile.REQUESTER,
         'can_see_reports': user_role in (Profile.ADMIN, Profile.COORDINATOR),

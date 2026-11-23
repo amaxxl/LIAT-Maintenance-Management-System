@@ -30,7 +30,7 @@ Record the actual test count, outcome, date and environment **after running** th
 | B11 | Closed workflow | Repaired request ends Closed; no further actions allowed | Not yet run |
 | B12 | Equipment relocation | Earlier request retains original unit/room/tag | Not yet run |
 | B13 | Reporting | Correct counts for status, completed/closed, overdue and group work | Not yet run |
-| B14 | Request filtering | Search, status, group, priority and overdue filters work | Not yet run |
+| B14 | Request filtering | Search and separate equipment, status, group, priority, submitted-from/to, and overdue filters work together without exposing out-of-scope requests | Not yet run |
 | B15 | Admin users | Create/update/deactivate user and assign profile role in Django Admin | Not yet run |
 
 Use fictional data only and capture screenshots of the test results for the thesis. Note any failure and the corrections applied. Negative tests should show HTTP 403 or a validation error with no unauthorised state change.

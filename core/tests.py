@@ -228,6 +228,78 @@ class WorkflowTests(TestCase):
             self.assertEqual(response.status_code, 302)
             self.assertTrue(R.objects.filter(reporter=person, title='Broken PC').exists())
 
+    def test_dashboard_equipment_filter_and_dropdowns(self):
+        another_asset = Equipment.objects.create(
+            asset_tag='PC02', name='Other PC', category=self.cat, location=self.loc)
+        other_request = R.objects.create(
+            equipment=another_asset, reporter=self.requester,
+            problem_type=self.problem, title='PC02 fault', description='Other issue',
+            priority='high')
+        self.login(self.requester)
+        page = self.client.get(reverse('dashboard'), {'equipment': str(self.asset.pk)})
+        self.assertEqual(list(page.context['requests']), [self.req])
+        self.assertContains(page, 'id="equipment"')
+        self.assertContains(page, 'PC01')
+        self.assertContains(page, 'PC02')
+        page = self.client.get(reverse('dashboard'), {'equipment': str(another_asset.pk)})
+        self.assertEqual(list(page.context['requests']), [other_request])
+
+    def test_dashboard_group_status_priority_combined(self):
+        self.review_assign()
+        other_request = R.objects.create(
+            equipment=self.asset, reporter=self.requester,
+            problem_type=self.problem, title='Second issue',
+            description='Not reviewed yet', priority='high')
+        self.login(self.coord)
+        page = self.client.get(reverse('dashboard'), {
+            'group': str(self.group.pk), 'status': R.ASSIGNED,
+            'priority': 'medium', 'equipment': str(self.asset.pk),
+        })
+        self.assertEqual(list(page.context['requests']), [self.req])
+        self.assertContains(page, 'IT service')
+        page = self.client.get(reverse('dashboard'), {'group': str(self.group.pk), 'priority': 'high'})
+        self.assertEqual(list(page.context['requests']), [])
+        page = self.client.get(reverse('dashboard'), {'status': R.SUBMITTED, 'priority': 'high'})
+        self.assertEqual(list(page.context['requests']), [other_request])
+
+    def test_dashboard_submitted_date_range_inclusive(self):
+        old_request = R.objects.create(
+            equipment=self.asset, reporter=self.requester,
+            problem_type=self.problem, title='Old fault', description='Earlier fault')
+        R.objects.filter(pk=old_request.pk).update(created_at=timezone.now() - timedelta(days=10))
+        self.req.refresh_from_db()
+        old_request.refresh_from_db()
+        today = timezone.localtime(self.req.created_at).date().isoformat()
+        earlier = timezone.localtime(old_request.created_at).date().isoformat()
+        self.login(self.requester)
+        page = self.client.get(reverse('dashboard'), {'date_from': today, 'date_to': today})
+        self.assertEqual(list(page.context['requests']), [self.req])
+        self.assertContains(page, 'id="date_from"')
+        self.assertContains(page, 'id="date_to"')
+        page = self.client.get(reverse('dashboard'), {'date_to': earlier})
+        self.assertEqual(list(page.context['requests']), [old_request])
+        page = self.client.get(reverse('dashboard'), {'date_from': earlier, 'date_to': today})
+        self.assertEqual({x.pk for x in page.context['requests']}, {self.req.pk, old_request.pk})
+
+    def test_dashboard_filter_does_not_expose_other_requesters_equipment(self):
+        another_asset = Equipment.objects.create(
+            asset_tag='PRIVATE-PC', name='Private PC', category=self.cat, location=self.loc)
+        private_request = R.objects.create(
+            equipment=another_asset, reporter=self.other,
+            problem_type=self.problem, title='Private work', description='Private details')
+        self.login(self.requester)
+        page = self.client.get(reverse('dashboard'))
+        self.assertNotContains(page, 'PRIVATE-PC')
+        self.assertNotContains(page, 'Private work')
+        self.assertEqual([e.pk for e in page.context['equipment_choices']], [self.asset.pk])
+        page = self.client.get(reverse('dashboard'), {
+            'equipment': str(another_asset.pk), 'date_from': '2020-01-01',
+        })
+        self.assertEqual(list(page.context['requests']), [])
+        self.assertNotContains(page, 'PRIVATE-PC')
+        self.assertNotContains(page, 'Private work')
+        self.assertEqual(private_request.reporter_id, self.other.pk)
+
     def test_other_requester_direct_url_and_dashboard_private(self):
         self.login(self.other)
         response = self.client.get(reverse('request_detail', args=[self.req.pk]))
