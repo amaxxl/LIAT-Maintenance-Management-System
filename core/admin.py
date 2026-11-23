@@ -30,10 +30,22 @@ class RequestAdmin(admin.ModelAdmin):
     list_display = ('id', 'title', 'status', 'group', 'technician', 'reporter')
     list_filter = ('status', 'group', 'priority')
     search_fields = ('title', 'equipment__asset_tag', 'reporter__username')
-    # Workflow changes must be made through the audited application service.
-    readonly_fields = ('status', 'group', 'technician', 'due_at', 'reported_unit_id',
+    # Maintenance requests are submitted and managed only by the application workflow.
+    # The Academy Administrator can inspect them here, but cannot create, edit, or
+    # delete requests without bypassing the validated, audited services.
+    readonly_fields = ('reporter', 'equipment', 'problem_type',
+                       'status', 'group', 'technician', 'due_at', 'reported_unit_id',
                        'reported_unit_name', 'reported_location_id',
                        'reported_room_label', 'asset_tag_at_submission')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 class AuditRecordAdmin(admin.ModelAdmin):

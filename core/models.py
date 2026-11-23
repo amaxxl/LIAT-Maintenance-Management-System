@@ -82,6 +82,12 @@ class MaintenanceRequest(models.Model):
    self.asset_tag_at_submission=self.equipment.asset_tag
   else:
    old=type(self).objects.get(pk=self.pk)
+   # Request identity must stay linked to the submitted reporter, equipment and
+   # problem type. Otherwise the original room/unit snapshot and history would
+   # describe a different fault than the current foreign-key references.
+   for field in ('reporter_id', 'equipment_id', 'problem_type_id'):
+    if getattr(self, field) != getattr(old, field):
+     raise ValidationError('Reporter, equipment and problem type cannot change after submission')
    for field in ('reported_location_id','reported_room_label','reported_unit_id','reported_unit_name','asset_tag_at_submission'):
     if getattr(self,field)!=getattr(old,field):raise ValidationError('Historical submission snapshot cannot be changed')
   super().save(*args,**kwargs)

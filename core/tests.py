@@ -217,6 +217,60 @@ class WorkflowTests(TestCase):
         with self.assertRaises(ValidationError):
             self.req.save()
 
+    def test_submitted_request_identity_cannot_be_changed_on_model_save(self):
+        other_equipment = Equipment.objects.create(
+            asset_tag='PC99', name='Replacement', category=self.cat, location=self.loc2)
+        another_problem = ProblemType.objects.create(name='Software')
+        for field, replacement in (
+            ('reporter', self.other),
+            ('equipment', other_equipment),
+            ('problem_type', another_problem),
+        ):
+            current = R.objects.get(pk=self.req.pk)
+            setattr(current, field, replacement)
+            with self.subTest(field=field), self.assertRaises(ValidationError):
+                current.save()
+        self.req.refresh_from_db()
+        self.assertEqual(self.req.reporter, self.requester)
+        self.assertEqual(self.req.equipment, self.asset)
+        self.assertEqual(self.req.problem_type, self.problem)
+
+    def test_request_identity_remains_immutable_after_assignment(self):
+        self.review_assign()
+        current = R.objects.get(pk=self.req.pk)
+        current.reporter = self.other
+        with self.assertRaises(ValidationError):
+            current.save()
+        current.refresh_from_db()
+        self.assertEqual(current.status, R.ASSIGNED)
+        self.assertEqual(current.reporter, self.requester)
+        self.assertEqual(AssignmentHistory.objects.filter(request=current).count(), 1)
+
+    def test_django_admin_request_pages_are_view_only(self):
+        # Even a Django superuser cannot bypass audited request creation,
+        # transitions, or historical identity via the Admin interface.
+        superuser = User.objects.create_superuser(
+            'reviewer', 'reviewer@example.invalid', 'LocalTest123!')
+        self.client.force_login(superuser)
+        model_admin = admin.site._registry[R]
+        for field in ('reporter', 'equipment', 'problem_type', 'status',
+                      'group', 'technician', 'due_at'):
+            self.assertIn(field, model_admin.get_readonly_fields(None, self.req))
+        change_url = reverse('admin:core_maintenancerequest_change', args=[self.req.pk])
+        self.assertEqual(self.client.get(change_url).status_code, 200)
+        self.assertEqual(self.client.post(change_url, {
+            'reporter': self.other.pk,
+            'equipment': self.asset.pk,
+            'problem_type': self.problem.pk,
+        }).status_code, 403)
+        self.assertEqual(self.client.get(reverse(
+            'admin:core_maintenancerequest_add')).status_code, 403)
+        self.assertEqual(self.client.post(reverse(
+            'admin:core_maintenancerequest_delete', args=[self.req.pk])).status_code, 403)
+        self.req.refresh_from_db()
+        self.assertEqual(self.req.reporter, self.requester)
+        self.assertTrue(R.objects.filter(pk=self.req.pk).exists())
+
     def test_requester_student_and_legacy_employee_submit(self):
         self.assertEqual(role(self.legacy), Profile.REQUESTER)
         for person in (self.student, self.legacy):

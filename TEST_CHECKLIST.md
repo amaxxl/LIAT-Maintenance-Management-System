@@ -41,3 +41,10 @@ Use fictional data only and capture screenshots of the test results for the thes
 - Django Admin provides account/master-data editing but this has not been individually browser-tested in this ZIP.
 - Backups, concurrent editing, load testing, secure deployment, and comprehensive UX assessment are unfinished.
 - `liat_dev.sqlite3` is deliberately excluded from this ZIP; local request records remain in your existing database if you choose the documented migration-safe upgrade path.
+
+## Historical request identity and Django Admin (Update 04)
+
+- Verify that existing maintenance requests can be inspected but **not added, edited, or deleted** through Django Admin, including with a superuser account.
+- Attempt to change `reporter`, `equipment`, or `problem_type` through a normal model `.save()` after submission; the application must reject the change.
+- Verify that moving equipment between rooms still changes its **current location** but does not alter the request's **original location snapshot**.
+- Re-run the complete regression suite. Model `.save()` guards do not protect against raw SQL or bulk `QuerySet.update()` calls.
