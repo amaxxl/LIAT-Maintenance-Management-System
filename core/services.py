@@ -23,8 +23,7 @@ def role(user):
 
 def scope_groups(user):
     """Group IDs a coordinator is authorised to administer."""
-    if role(user) == Profile.ADMIN:
-        return MaintenanceGroup.objects.values_list('id', flat=True)
+    # Administrator oversight is read-only; coordinator scopes never include admins.
     if role(user) == Profile.COORDINATOR:
         return CoordinatorScope.objects.filter(coordinator=user).values_list('group_id', flat=True)
     return MaintenanceGroup.objects.none().values_list('id', flat=True)
@@ -34,7 +33,8 @@ def visible_requests(user):
     """One shared intake queue: unassigned faults visible to all active coordinators.
 
     After triage, only coordinators scoped to the chosen group can view/action it.
-    The academy administrator has full oversight; requester/technician see only their work.
+    The academy administrator has read-only oversight of requests and reports;
+    only scoped coordinators may perform maintenance workflow actions.
     """
     r = role(user)
     qs = R.objects.all()
@@ -57,8 +57,6 @@ def can_view(user, request):
 
 def coordinator_allowed(user, group):
     r = role(user)
-    if r == Profile.ADMIN:
-        return True
     return r == Profile.COORDINATOR and CoordinatorScope.objects.filter(
         coordinator=user, group=group
     ).exists()
@@ -67,10 +65,8 @@ def coordinator_allowed(user, group):
 def can_manage_request(user, request):
     """Prevents re-routing a different coordinator's already-owned request."""
     r = role(user)
-    return r == Profile.ADMIN or (
-        r == Profile.COORDINATOR and (
-            request.group_id is None or coordinator_allowed(user, request.group)
-        )
+    return r == Profile.COORDINATOR and (
+        request.group_id is None or coordinator_allowed(user, request.group)
     )
 
 
@@ -94,7 +90,7 @@ def allowed_actions(user, request):
             return [('start', 'Start work')]
         if request.status == R.IN_PROGRESS:
             return [('complete', 'Complete work')]
-    if r in (Profile.COORDINATOR, Profile.ADMIN) and can_manage_request(user, request):
+    if r == Profile.COORDINATOR and can_manage_request(user, request):
         if request.status == R.SUBMITTED:
             return [('review', 'Review request'), ('reject', 'Reject request')]
         if request.status == R.UNDER_REVIEW:

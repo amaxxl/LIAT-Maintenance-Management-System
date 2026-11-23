@@ -76,7 +76,7 @@ def action_form_context(user, item, data=None):
         return {'action_form': None, 'eligible_by_group': {}}
     form = ActionForm(data, user=user, item=item) if data is not None else ActionForm(user=user, item=item)
     eligible = {}
-    if role(user) in (Profile.ADMIN, Profile.COORDINATOR):
+    if role(user) == Profile.COORDINATOR:
         for group in form.fields['group'].queryset:
             eligible[str(group.pk)] = list(eligible_technicians(
                 group, item.equipment.category, item.problem_type

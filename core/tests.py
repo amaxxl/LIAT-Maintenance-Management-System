@@ -57,6 +57,49 @@ class WorkflowTests(TestCase):
         perform_action(self.req.pk, self.coord, 'assign', reason='Qualified IT group',
                        group=self.group, technician=self.tech)
 
+    def test_administrator_can_view_and_report_but_has_no_workflow_actions(self):
+        # Oversight remains visible, but action controls and direct POSTs are denied.
+        self.assertTrue(can_view(self.admin, self.req))
+        self.login(self.admin)
+        detail = self.client.get(reverse('request_detail', args=[self.req.pk]))
+        self.assertEqual(detail.status_code, 200)
+        self.assertIsNone(detail.context['action_form'])
+        self.assertNotContains(detail, 'Update maintenance work')
+        self.assertEqual(self.client.get(reverse('reports')).status_code, 200)
+        response = self.client.post(reverse('request_action', args=[self.req.pk]), {
+            'action': 'review', 'reason': 'Attempt to bypass UI'
+        })
+        self.assertEqual(response.status_code, 403)
+        with self.assertRaises(PermissionDenied):
+            perform_action(self.req.pk, self.admin, 'review', reason='Direct call')
+        self.req.refresh_from_db()
+        self.assertEqual(self.req.status, R.SUBMITTED)
+        self.assertFalse(StatusHistory.objects.filter(request=self.req).exists())
+
+    def test_administrator_cannot_assign_return_close_or_reject(self):
+        # Security checks must be enforced by services, not just hidden buttons.
+        with self.assertRaises(PermissionDenied):
+            perform_action(self.req.pk, self.admin, 'reject', reason='Not authorised')
+        self.review_assign()
+        with self.assertRaises(PermissionDenied):
+            perform_action(self.req.pk, self.admin, 'assign', reason='Not authorised',
+                           group=self.group, technician=self.tech2)
+        perform_action(self.req.pk, self.tech, 'start')
+        perform_action(self.req.pk, self.tech, 'complete', reason='Repaired')
+        with self.assertRaises(PermissionDenied):
+            perform_action(self.req.pk, self.admin, 'return', reason='Not authorised')
+        with self.assertRaises(PermissionDenied):
+            perform_action(self.req.pk, self.admin, 'close', reason='Not authorised')
+        self.req.refresh_from_db()
+        self.assertEqual(self.req.status, R.COMPLETED)
+        self.assertEqual(self.req.technician, self.tech)
+        self.assertEqual(StatusHistory.objects.filter(request=self.req).count(), 4)
+        self.assertEqual(AssignmentHistory.objects.filter(request=self.req).count(), 1)
+        # Responsible coordinator remains able to complete the workflow.
+        perform_action(self.req.pk, self.coord, 'close', reason='Verified repair')
+        self.req.refresh_from_db()
+        self.assertEqual(self.req.status, R.CLOSED)
+
     def test_snapshot_survives_equipment_move_and_unit_rename(self):
         self.asset.location = self.loc2
         self.asset.save()

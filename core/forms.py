@@ -28,7 +28,7 @@ class ActionForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.item = item
         self.fields['action'].choices = allowed_actions(user, item)
-        if role(user) not in (Profile.COORDINATOR, Profile.ADMIN):
+        if role(user) != Profile.COORDINATOR:
             return
         groups = MaintenanceGroup.objects.filter(pk__in=scope_groups(user)).order_by('name')
         self.fields['group'].queryset = groups

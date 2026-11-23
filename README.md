@@ -4,8 +4,8 @@ This is the **updated source project**, based on the user's original Stage 2 ZIP
 
 ## Improvements in this update
 
-- Four permission roles: **Requester** (student/employee account type), Technician, Maintenance Coordinator, Academy Administrator. Existing `employee` role entries remain accepted as requesters so older databases can migrate safely.
-- Explicit shared **intake queue**: active coordinators (and the administrator) see new unassigned Submitted and Under Review requests. The intake coordinator selects an authorised maintenance group. Once assigned, only a coordinator scoped to that group (or administrator) can manage it.
+- Four separate permission roles: **Requester** (student/employee account type), Technician, Maintenance Coordinator (maintenance workflow), Academy Administrator (user/equipment/master-data administration and read-only request oversight). Existing `employee` role entries remain accepted as requesters so older databases can migrate safely.
+- Explicit shared **intake queue**: active coordinators see new unassigned Submitted and Under Review requests and may review or reject them. A coordinator may assign requests only to a group within their authorised scope. Once assigned, only a coordinator scoped to that group can manage the workflow. The academy administrator can view all requests and maintenance reports but **cannot** review, assign, reassign, return, reject or close maintenance requests.
 - Assignment uses **validated group and technician dropdowns**. Candidate technicians must be active, have active group membership, and have active competency for the equipment category **and** problem type. Server-side validation is authoritative; filtering dropdown options is only a usability aid.
 - **Reassignment** from Assigned, In Progress, or Completed resets the request to Assigned and logs the old/new technician and group with actor, time, and reason. The previous assignee loses access.
 - **Return for correction** after Completed returns work to In Progress for the **same** technician; alternatively the coordinator selects *Reassign for correction*, which returns the work to Assigned for the new technician.
