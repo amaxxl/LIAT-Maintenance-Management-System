@@ -1,50 +1,68 @@
-# LIAT Stage 3 — verification checklist (record outcomes honestly)
+# LIAT Maintenance Management System — final verification checklist
 
-Do not claim these tests passed until they were run on a machine with the project's Django dependencies installed. The provided project defines **19 automated test cases**; they were checked for Python syntax in the preparation environment but the Django suite was **not executed there** because Django was not available and the environment could not download packages.
+**Existing development setup:** On 23 November 2026, the developer reported
+`Ran 33 tests ... OK` with zero Django system-check issues. Those results do
+**not** yet verify a completely clean clone or the latest documentation/script.
+Record fresh results and browser observations honestly before submission.
 
-## Before a supervisor submission
+## Fresh-install verification
+
+Use a separate fresh clone or extracted source folder, NOT the folder that
+contains your existing demo database. Follow `README.txt` and run:
 
 ```powershell
+.\.venv\Scripts\python.exe manage.py migrate
 .\.venv\Scripts\python.exe manage.py check
 .\.venv\Scripts\python.exe manage.py makemigrations --check --dry-run
-.\.venv\Scripts\python.exe manage.py test -v 2
+.\.venv\Scripts\python.exe manage.py seed_demo
+.\.venv\Scripts\python.exe manage.py test
 .\.venv\Scripts\python.exe manage.py runserver
 ```
 
-Record the actual test count, outcome, date and environment **after running** these commands. A newly created migration may need to be applied before `--check --dry-run` passes.
+Check that `migrate` uses the included migration files without first running
+`makemigrations`, and that no new model changes are proposed. Confirm
+README.txt instructions, demo user logins, and URL match the actual project.
 
-## Browser scenarios to demonstrate
+## Browser demonstration scenarios
 
-| ID | Test | What to check | Result |
+| ID | Scenario | Expected result | Current final-verification status |
 |---|---|---|---|
-| B01 | Student fault reporting | `student1` creates a new fault; submitted and snapshotted | Not yet run |
-| B02 | Legacy employee migration | Existing `employee1` still sees only their requests | Not yet run |
-| B03 | Intake queue | New unassigned request visible to coordinators 1 and 2 | Not yet run |
-| B04 | Qualified assignment | Coordinator 1 uses group and technician dropdowns; reason logged | Not yet run |
-| B05 | Scope enforcement | Coordinator 2 cannot read/modify a request assigned to IT Maintenance | Not yet run |
-| B06 | Technician privacy | Technician 2 cannot modify Technician 1's current work | Not yet run |
-| B07 | Completion guard | Completion without resolution note is rejected | Not yet run |
-| B08 | Reassignment | Technician 1 → 2; new status Assigned and old/new history saved | Not yet run |
-| B09 | Return for correction | Completed → In Progress for same technician | Not yet run |
-| B10 | Reassign for correction | Completed → Assigned to a different technician | Not yet run |
-| B11 | Closed workflow | Repaired request ends Closed; no further actions allowed | Not yet run |
-| B12 | Equipment relocation | Earlier request retains original unit/room/tag | Not yet run |
-| B13 | Reporting | Correct counts for status, completed/closed, overdue and group work | Not yet run |
-| B14 | Request filtering | Search and separate equipment, status, group, priority, submitted-from/to, and overdue filters work together without exposing out-of-scope requests | Not yet run |
-| B15 | Admin users | Create/update/deactivate user and assign profile role in Django Admin | Not yet run |
+| B01 | Student fault reporting | New request Submitted; original unit/room recorded | To verify |
+| B02 | Requester privacy | Another requester cannot see/open the request | To verify |
+| B03 | Shared intake | Unassigned request initially visible to authorised coordinators | To verify |
+| B04 | Qualified assignment | Valid group/technician choice with reason; invalid choice refused | To verify |
+| B05 | Coordinator scope | Out-of-group coordinator cannot manage assigned work | To verify |
+| B06 | Technician privacy | Only currently assigned technician can work on a request | To verify |
+| B07 | Completion guard | Empty resolution note rejected | To verify |
+| B08 | Reassignment | Assigned status and assignment history correctly recorded | To verify |
+| B09 | Return for correction | Same technician: In Progress; different: Assigned | To verify |
+| B10 | Workflow closure | Coordinator closes completed work; closed request cannot be changed | To verify |
+| B11 | Equipment move | Request's original unit/room remains unchanged | To verify |
+| B12 | Reports | Status, completed, overdue and group workload counts correct | To verify |
+| B13 | Dashboard filters | Status/equipment/group/priority/date/overdue can be combined | To verify |
+| B14 | Deadline management | Coordinator sets/updates/clears with reason; history saved | To verify |
+| B15 | Administrator role | Admin cannot perform coordinator actions; master-data edits work | To verify |
+| B16 | Request Django Admin | MaintenanceRequest is view-only, including superusers | To verify |
 
-Use fictional data only and capture screenshots of the test results for the thesis. Note any failure and the corrections applied. Negative tests should show HTTP 403 or a validation error with no unauthorised state change.
+For negative tests, confirm HTTP 403 or a validation error and verify no
+unauthorised database change. Capture screenshots if used in the thesis.
 
-## Scope and limitations
+## Final submission checks
 
-- No Vue/DRF implementation or PostgreSQL migration in this Stage 3 ZIP.
-- Django Admin provides account/master-data editing but this has not been individually browser-tested in this ZIP.
-- Backups, concurrent editing, load testing, secure deployment, and comprehensive UX assessment are unfinished.
-- `liat_dev.sqlite3` is deliberately excluded from this ZIP; local request records remain in your existing database if you choose the documented migration-safe upgrade path.
+- [ ] Fresh-clone installation completed using tracked migrations.
+- [ ] `README.txt` instructions and local demo accounts checked.
+- [ ] `python manage.py test` completed and results recorded accurately.
+- [ ] UI, Django Admin and request history reviewed in browser.
+- [ ] Final thesis states only features truly present in this version.
+- [ ] Process/state/sequence diagrams are distinct and match the code.
+- [ ] No `.venv`, local `.sqlite3`, real credentials or `.env` files in Git.
+- [ ] Private GitHub repository is shared with the supervisor if needed.
+- [ ] Final commit and ZIP, if sent, contain source, migrations, tests,
+      requirements and `README.txt`.
 
-## Historical request identity and Django Admin (Update 04)
+## Known limits
 
-- Verify that existing maintenance requests can be inspected but **not added, edited, or deleted** through Django Admin, including with a superuser account.
-- Attempt to change `reporter`, `equipment`, or `problem_type` through a normal model `.save()` after submission; the application must reject the change.
-- Verify that moving equipment between rooms still changes its **current location** but does not alter the request's **original location snapshot**.
-- Re-run the complete regression suite. Model `.save()` guards do not protect against raw SQL or bulk `QuerySet.update()` calls.
+The current prototype is Django templates + SQLite; Vue/DRF and a verified
+PostgreSQL installation are not implemented. Production deployment, advanced
+backup/restore, penetration testing, performance/concurrency validation and
+report export are outside the current tested scope.

@@ -1,15 +1,30 @@
-# Changes from uploaded Stage 2 project
+# LIAT Maintenance Management System — development notes
 
-- Added `requester` role and `Profile.account_type` (`student` or `employee`), while interpreting legacy `employee` roles as requesters.
-- Expanded demo accounts; old accounts remain, and existing passwords are never reset.
-- Shared central intake queue until the maintenance group is chosen, then group-scoped coordinator ownership.
-- Validated group/technician dropdowns with matching group membership, equipment category and problem type.
-- Explicit, audited reassignment from Assigned/In Progress/Completed to Assigned; approved closure and return to In Progress for the same technician.
-- Search/status/priority/group/overdue request filters and scoped reporting by status, completion, overdue and group workload.
-- Expanded test suite from 5 to 19 cases with direct-URL privacy, authorisation, eligibility, invalid completion, reassignment, return, snapshots and reports.
-- Professionalised the Django interface and added user profile editing support in Django Admin.
-- Read-only status, assignment and repair-audit rows in Django Admin.
+These notes summarize implemented areas of the Stage 3 local Django prototype.
+Actual Git commits provide the authoritative development chronology; no
+backdated or artificial history has been created.
 
-## Verification status
+## Implementation areas
 
-Python files passed `compileall` in the packaging environment. Django was not installed there and could not be downloaded, so Django migrations, `manage.py check`, automated tests and browser integration tests **have not been run on the new ZIP**. Run the included Windows commands before declaring those results in the thesis.
+- Requester accounts (student or employee), technician, Maintenance Coordinator
+  and Academy Administrator roles; legacy employee records remain recognized.
+- Central unassigned intake followed by group-scoped coordinator actions.
+- Group/technician dropdown validation with server-side eligibility checks.
+- Audited assignment, reassignment, returns, resolution notes and closure.
+- Administrator role separated from the maintenance workflow.
+- Coordinator-controlled optional deadlines and a deadline-change history.
+- Role-scoped dashboard filters for status, equipment, group, priority,
+  submission date and overdue work; scoped reports.
+- Restriction of submitted request identity edits and read-only request
+  records in Django Admin; equipment master-data editing remains available.
+- Included migrations and a growing automated regression test suite.
+
+## Local verification and remaining work
+
+The developer reported 33 passing Django tests and no system-check issues
+on Windows on 23 November 2026. Clean-clone installation, current browser
+walkthrough, and consistency checks between the final diagrams, thesis text,
+and running project still require final verification.
+
+This prototype has not implemented Vue, Django REST Framework or a production
+deployment. See README.txt for installation, accounts, functionality and limits.

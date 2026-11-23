@@ -1,19 +1,28 @@
-# From PowerShell in extracted LIAT_stage2_code. Back up your DB and migration files first!
+# LIAT Stage 3 local development helper (Windows PowerShell).
+# Run from any folder; always execute commands in the project containing this file.
+# DO NOT use on real data or a public production server; seeds fictional users.
 $ErrorActionPreference = 'Stop'
-if (!(Test-Path '.venv\Scripts\python.exe')) {
-    py -m venv .venv
-    if ($LASTEXITCODE -ne 0) { throw 'Unable to create the Python environment.' }
+Push-Location $PSScriptRoot
+try {
+    if (!(Test-Path '.venv\Scripts\python.exe')) {
+        py -3.14 -m venv .venv
+        if ($LASTEXITCODE -ne 0) { throw 'Unable to create Python 3.14 environment.' }
+    }
+    $python = '.\.venv\Scripts\python.exe'
+    & $python -m pip install -r requirements.txt
+    if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
+
+    # The migrations are already included in the repository.
+    & $python manage.py migrate
+    if ($LASTEXITCODE -ne 0) { throw 'Database migration failed. Keep your database backup.' }
+    & $python manage.py seed_demo
+    if ($LASTEXITCODE -ne 0) { throw 'Demo data setup failed.' }
+    & $python manage.py test
+    if ($LASTEXITCODE -ne 0) { throw 'Tests failed. Fix issues before demonstration.' }
+
+    Write-Host 'Tests passed. Starting http://127.0.0.1:8000/login/'
+    & $python manage.py runserver
 }
-$python = '.\.venv\Scripts\python.exe'
-& $python -m pip install -r requirements.txt
-if ($LASTEXITCODE -ne 0) { throw 'Dependency installation failed.' }
-& $python manage.py makemigrations core
-if ($LASTEXITCODE -ne 0) { throw 'Migration generation failed.' }
-& $python manage.py migrate
-if ($LASTEXITCODE -ne 0) { throw 'Database migration failed. Do not delete your DB.' }
-& $python manage.py seed_demo
-if ($LASTEXITCODE -ne 0) { throw 'Demo data setup failed.' }
-& $python manage.py test -v 2
-if ($LASTEXITCODE -ne 0) { throw 'Tests failed. Capture the test output and fix issues before demonstration.' }
-Write-Host 'Tests passed locally. Starting http://127.0.0.1:8000/login/'
-& $python manage.py runserver
+finally {
+    Pop-Location
+}
